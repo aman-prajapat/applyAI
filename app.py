@@ -1,84 +1,130 @@
-from flask import Flask, render_template, request, redirect, url_for, session
-import yagmail
-import mainGraph
+from flask import Flask, render_template, request, redirect, url_for, session,jsonify
+
 app = Flask(__name__)
-app.secret_key = "secret123"   # needed for session
 
-# ====== REPLACE WITH YOUR DETAILS ======
-GMAIL = "your@gmail.com"
-APP_PASSWORD = "xxxx xxxx xxxx xxxx"
+from mainGraph import *
+from langgraph.graph import StateGraph,START,END
+
+APPLYGRAPH = StateGraph(JobData)
+
+APPLYGRAPH.add_node("find_email", extract_mail_id)
+APPLYGRAPH.add_node("gen_body_sub", create_mail)
+APPLYGRAPH.add_node("update_mail", update_mail)
+APPLYGRAPH.add_node("send_mail", send_mail)
+
+APPLYGRAPH.add_edge(START, "find_email")
+APPLYGRAPH.add_edge("find_email", "gen_body_sub")
+
+APPLYGRAPH.add_conditional_edges(
+    "gen_body_sub",
+    wantToupdateMail,
+    {
+        "update_mail": "update_mail",
+        "send_email": "send_mail",
+    }
+)
+
+APPLYGRAPH.add_conditional_edges(
+    "update_mail",
+    wantToupdateMail,
+    {
+        "update_mail": "update_mail",
+        "send_email": "send_mail",
+    }
+)
+
+APPLYGRAPH.add_edge("send_mail", END)
 
 
-# Dummy LLM functions (replace with LangGraph later)
-def generate_mail(post_data, user_info):
-    
-    return subject, body, email
+WORKFLOW:JobData
+CONFIG = {'configurable':{'thread_id':1}}
 
-
-def update_body(old_body, feedback):
-    return f"{old_body}\n\nUPDATED BASED ON FEEDBACK:\n{feedback}"
-
-
-# ========= ROUTES ===========
-
-@app.route("/")
+@app.route('/home')
 def home():
+    return "home"
+
+@app.route('/')
+def index():
     return render_template("index.html")
 
 
-@app.route("/process", methods=["POST"])
-def process():
-    post_data = request.form["post_data"]
-    user_info = request.form["user_info"]
+@app.route("/getData",methods = ['POST'])
+def getData():
+    global WORKFLOW
+    checkpointer = InMemorySaver()
+    WORKFLOW = APPLYGRAPH.compile(checkpointer=checkpointer)
 
-    # Save in session
-    session["post_data"] = post_data
-    session["user_info"] = user_info
+    user_info = request.form['user_info']
+    post_data = request.form['post_data']
+    print(user_info, post_data)
+    state_data = WORKFLOW.invoke({"user_info":user_info,"post_data":post_data},config=CONFIG)
 
-    subject, body, email = generate_mail(post_data, user_info)
 
-    session["subject"] = subject
-    session["body"] = body
-    session["email"] = email
+    return jsonify({
+        "body": state_data["body"],
+        "subject": state_data["subject"],
+        "email": state_data["email"]
+    }), 200
 
-    return render_template(
-        "result.html",
-        subject=subject,
-        body=body,
-        email=email
+@app.route('/generate',methods=['POST'])
+def generate():
+    global WORKFLOW
+    feedback = request.form['feedback'] or [""]
+
+    state_data = WORKFLOW.invoke(
+        Command(
+            resume=False,               # <-- resume graph
+            update={"feedback": [feedback]}  # <-- update JobData.feedback
+        ),
+        config=CONFIG
     )
 
-
-@app.route("/update_prompt")
-def update_prompt():
-    return render_template("update.html")
-
-
-@app.route("/update_process", methods=["POST"])
-def update_process():
-    feedback = request.form["feedback"]
-    old_body = session["body"]
-
-    new_body = update_body(old_body, feedback)
-    session["body"] = new_body
-
-    return render_template(
-        "result.html",
-        subject=session["subject"],
-        body=new_body,
-        email=session["email"]
-    )
+    return jsonify({
+        "body": state_data["body"],
+        "subject": state_data["subject"],
+        "email": state_data["email"]
+    }), 200
 
 
-@app.route("/send_email")
-def send_email():
-    yag = yagmail.SMTP(GMAIL, APP_PASSWORD)
-    yag.send(
-        to=session["email"],
-        subject=session["subject"],
-        contents=session["body"]
-    )
-    return "<h1>Email Sent Successfully! ✔</h1>"
+
+
+@app.route('/send',methods=['POST'])
+def send():
+    global WORKFLOW
+
+    file = request.files.get("attachment")
+
+    if file:
+        file_bytes = file.read()
+        file_name = file.filename
+    else:
+        file_bytes = None
+        file_name = None
+
+    WORKFLOW.invoke(Command(resume=True,
+                            update={"file_bytes": file_bytes,
+                                     "file_name": file_name }
+                            ), config=CONFIG)
+    del WORKFLOW
+    return 'email deliverd'
+
+@app.route('/file',methods=['POST'])
+def file():
+    file = request.files.get("attachment")
+
+    if file:
+        file_bytes = file.read()
+        file_name = file.filename
+    else:
+        file_bytes = None
+        file_name = None
+    if file_bytes and file_name:
+        import mimetypes
+        mime_type, _ = mimetypes.guess_type(file_name)
+        maintype, subtype = mime_type.split("/")
+
+    return f'email deliverd {mime_type}, {maintype}, {subtype},{file_name} '
+
 
 
 if __name__ == "__main__":

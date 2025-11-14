@@ -1,24 +1,101 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+
 <head>
-    <title>Job Mail Generator</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Auto-Mail Assistant</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
+
 <body>
 
-<div class="container">
-    <h1>Create Your Email</h1>
+    <div class="container">
+        <h1>AI Auto-Mail Assistant</h1>
+        <p class="sub">Paste job post → Generate email → Improve → Send</p>
 
-    <form action="/process" method="POST">
-        <label>Job Post Data</label>
-        <textarea name="post_data" required></textarea>
+        <!-- Job Post Form -->
+        <form id="jobForm" enctype="multipart/form-data">
+            <label>Your Profile Info</label>
+            <textarea name="user_info" rows="3" placeholder="I am Aman..."></textarea>
 
-        <label>Your Info</label>
-        <textarea name="user_info" required></textarea>
+            <label>Paste Job Post</label>
+            <textarea name="post_data" rows="6" placeholder="Paste job post here..."></textarea>
 
-        <button type="submit">Generate Email</button>
-    </form>
-</div>
+            <button type="button" onclick="generateEmail()">Generate Email</button>
+        </form>
+
+        <!-- Output Email Box -->
+        <div id="output" class="outputBox" style="display:none;"></div>
+
+        <!-- Feedback Box -->
+        <div id="feedbackBox" style="display:none;">
+            <label>Feedback</label>
+            <textarea id="feedbackInput" rows="3" placeholder="Make subject better..."></textarea>
+            <button onclick="sendFeedback()">Update Email</button>
+        </div>
+
+        <!-- Send Mail Box -->
+        <div id="sendBox" style="display:none;">
+            <label>Attach File (Optional)</label>
+            <input type="file" id="attachment">
+
+            <button onclick="sendMail()" class="sendBtn">Send Final Email</button>
+        </div>
+    </div>
+
+
+    <script>
+        function generateEmail() {
+            const formData = new FormData(document.getElementById("jobForm"));
+
+            fetch('/getData', {
+                method: 'POST',
+                body: formData
+            })
+                .then(res => res.json())
+                .then(d => {
+                    document.getElementById("output").style.display = 'block';
+                    document.getElementById("output").innerHTML =
+                        `<b>Subject:</b> ${d.subject}<br><br><b>Body:</b><br>${d.body.replace(/\n/g, '<br>')}`;
+
+                    document.getElementById("feedbackBox").style.display = 'block';
+                });
+        }
+
+        function sendFeedback() {
+            const fd = new FormData();
+            fd.append('feedback', document.getElementById('feedbackInput').value);
+
+            fetch('/generate', {
+                method: 'POST',
+                body: fd
+            })
+                .then(res => res.json())
+                .then(d => {
+                    document.getElementById("output").innerHTML =
+                        `<b>Subject:</b> ${d.subject}<br><br><b>Body:</b><br>${d.body.replace(/\n/g, '<br>')}`;
+
+                    document.getElementById("sendBox").style.display = 'block';
+                });
+        }
+
+        function sendMail() {
+            const fd = new FormData();
+            const file = document.getElementById("attachment").files[0];
+
+            if (file) fd.append('attachment', file);
+
+            fetch('/send', {
+                method: 'POST',
+                body: fd
+            })
+                .then(res => res.text())
+                .then(msg => alert(msg));
+        }
+    </script>
 
 </body>
+
 </html>
