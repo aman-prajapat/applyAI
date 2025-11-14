@@ -10,24 +10,17 @@ import operator
 from langgraph.types import interrupt, Command
 from langgraph.checkpoint.memory import InMemorySaver
 
-import mimetypes
-
-
 from dotenv import load_dotenv
 load_dotenv()
 
-
 import smtplib
+import mimetypes
 from email.message import EmailMessage
 import os
 
-model = ChatGroq(model= "openai/gpt-oss-120b",temperature=0.3)
-
-
+MODEL = ChatGroq(model= "openai/gpt-oss-120b",temperature=0.3)
 GMAIL = os.getenv("MAIL")
 APP_PASSWORD = os.getenv("PASSWORD")  
-
-
 
 class JobData(BaseModel):
     user_info : str = Field(default= "I am Aman Prajapat interested in AI field and have good skill set in the respective field",        
@@ -39,7 +32,7 @@ class JobData(BaseModel):
     feedback :Annotated[List[str],operator.add] = Field(default=[])
     file_bytes: bytes | None = None
     file_name: str | None = None
-    # loop :bool = False
+
 
 def send_mail(state:JobData):
     msg = EmailMessage()
@@ -47,6 +40,7 @@ def send_mail(state:JobData):
     msg["To"] = state.email
     msg["Subject"] = state.subject
     msg.set_content(state.body)
+    
  # attach file if available
     if state.file_bytes and state.file_name:
         mime_type, _ = mimetypes.guess_type(state.file_name)
@@ -72,7 +66,7 @@ def extract_mail_id(state:JobData):
     prompt = PromptTemplate(
         template= "From the text below, extract ONLY the email address  where the candidate has to apply.  Return ONLY the email (no other text).\n\n Post content:\n{post_data}"
     )
-    mail_chain = prompt | model | StrOutputParser()
+    mail_chain = prompt | MODEL | StrOutputParser()
 
     email = mail_chain.invoke({'post_data':state.post_data})
 
@@ -81,47 +75,69 @@ def extract_mail_id(state:JobData):
 
 def create_mail(state: JobData):
     prompt = PromptTemplate(
-        template=(
-            "You are an expert email writer.\n"
-            "Use the following details to create a professional job application email.\n\n"
-            "The email should be short and sweet with no place holders because its a automation system for send mail.\n"
-            "User information:\n{user_information}\n\n"
-            "Job Post Content:\n{post_data}\n\n"
-            "Now generate the email in JSON format as shown:\n"
-            "{{\n"
-            '  "subject": "Your email subject",\n'
-            '  "body": "Your email body with proper formating"\n'
-            "}}"
-        ),
-        input_variables=["user_information", "feedback", "post_data"]
-    )
+    template=(
+        "You are an expert email writer specialized in crafting concise, professional job application emails.\n"
+        "Your task is to generate a clean, well-formatted email for applying to an internship/job.\n\n"
+        "This mail should  be less than 200 words\n\n"
 
-    mail_chain = prompt | model | JsonOutputParser()
+        "Rules you MUST follow:\n"
+        "- The email must be short, direct, and professionally written.\n"
+        "- The tone should be confident and polite.\n"
+        "- Use the user's information only to describe their skills and background.\n"
+        "- Do NOT add any contact details or email IDs after the candidate’s name.\n"
+        "- Do NOT add placeholders like <name>, <company>, etc.\n"
+        "- Mention that the resume is attached.\n"
+        "- Output must ALWAYS be a JSON object.\n\n"
+
+        "User Information:\n{user_information}\n\n"
+        "Job Post Content:\n{post_data}\n\n"
+
+        "Return ONLY a JSON object in this format:\n"
+        "{{\n"
+        "  \"subject\": \"Your generated subject\",\n"
+        "  \"body\": \"Your generated email body in proper final formatting.\"\n"
+        "}}"
+    )
+)
+
+
+    mail_chain = prompt | MODEL | JsonOutputParser()
 
     # Step 3: Invoke model
     response = mail_chain.invoke({
         "user_information": state.user_info,
         "post_data": state.post_data
     })
-
-
     return {'body':response["body"],'subject':response['subject']}
 
 def update_mail(state:JobData):
     prompt = PromptTemplate(
-        template=(
-            "You are an expert email rewriter.\n"
-            "Update the email based on feedback.\n\n"
-            "Feedback: {feedback}\n\n"
-            "Old Subject: {subject}\n"
-            "Old Body: {body}\n\n"
-            "Return JSON with subject and body."
-        )
-    )
+    template = (
+    "You are an expert email refinement assistant.\n"
+    "Your job is to IMPROVE the existing email based ONLY on the user's feedback.\n"
+    "Do NOT rewrite the entire email. Keep the original structure, tone, and meaning.\n"
+    "Modify ONLY the parts that the feedback specifically mentions.\n\n"
+    
+    "The email must be short, professional, and suitable for applying to AI/ML internships.\n"
+    "The sender is an AI student with internship experience and strong skills. Keep this context in mind.\n"
+    "Make sure the email clearly communicates that the resume is attached.\n"
+    "Do NOT include placeholders. Use finalized text only.\n\n"
 
-    chain = prompt | model | JsonOutputParser()
+    "Feedback:\n{feedback}\n\n"
+    "Original Subject:\n{subject}\n\n"
+    "Original Body:\n{body}\n\n"
+
+    "Return ONLY a JSON object in this format:\n"
+    "{{\n"
+    "  \"subject\": \"Updated subject\",\n"
+    "  \"body\": \"Updated body text\"\n"
+    "}}"
+))
+
+
+    chain = prompt | MODEL | JsonOutputParser()
     response = chain.invoke({
-        "feedback": state.feedback,
+        "feedback": state.feedback[-1],
         "subject": state.subject,
         "body": state.body
     })
@@ -139,52 +155,5 @@ def wantToupdateMail(state: JobData):
     })
     if decision:
         return "send_email"
-
     else:
         return "update_mail"
-
-
-def main():
-
-    applyGraph = StateGraph(JobData)
-
-    applyGraph.add_node("find_email", extract_mail_id)
-    applyGraph.add_node("gen_body_sub", create_mail)
-    applyGraph.add_node("update_mail", update_mail)
-    # applyGraph.add_node("human_approval", human_approval)
-    applyGraph.add_node("send_mail", send_mail)
-
-    applyGraph.add_edge(START, "find_email")
-    applyGraph.add_edge("find_email", "gen_body_sub")
-
-    applyGraph.add_conditional_edges(
-        "gen_body_sub",
-        wantToupdateMail,
-        {
-            "update_mail": "update_mail",
-            "send_email": "send_mail",
-        }
-    )
-
-    applyGraph.add_conditional_edges(
-        "update_mail",
-        wantToupdateMail,
-        {
-            "update_mail": "update_mail",
-            "send_email": "send_mail",
-        }
-    )
-
-    applyGraph.add_edge("send_mail", END)
-
-    checkpointer = InMemorySaver()
-    workflow = applyGraph.compile(checkpointer=checkpointer)
-
-    config = {'configurable':{'thread_id':1}}
-    state1 = workflow.invoke({},config=config)
-
-    workflow.invoke(
-        Command(resume=True), 
-        config=config
-
-    )

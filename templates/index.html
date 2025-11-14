@@ -11,41 +11,62 @@
 
 <body>
 
-    <div class="container">
-        <h1>AI Auto-Mail Assistant</h1>
-        <p class="sub">Paste job post → Generate email → Improve → Send</p>
+    <div class="layout">
 
-        <!-- Job Post Form -->
-        <form id="jobForm" enctype="multipart/form-data">
-            <label>Your Profile Info</label>
-            <textarea name="user_info" rows="3" placeholder="I am Aman..."></textarea>
+        <!-- LEFT PANEL -->
+        <div class="left-panel">
+            <h1>AI Auto-Mail Assistant</h1>
+            <p class="sub">Paste job post → Generate → Refine → Send</p>
 
-            <label>Paste Job Post</label>
-            <textarea name="post_data" rows="6" placeholder="Paste job post here..."></textarea>
+            <form id="jobForm" enctype="multipart/form-data">
 
-            <button type="button" onclick="generateEmail()">Generate Email</button>
-        </form>
+                <label>Your Profile Info</label>
+                <textarea name="user_info" rows="3" placeholder="I am Aman..."></textarea>
 
-        <!-- Output Email Box -->
-        <div id="output" class="outputBox" style="display:none;"></div>
+                <label>Paste Job Post</label>
+                <textarea name="post_data" rows="7" placeholder="Paste job description here..."></textarea>
 
-        <!-- Feedback Box -->
-        <div id="feedbackBox" style="display:none;">
-            <label>Feedback</label>
-            <textarea id="feedbackInput" rows="3" placeholder="Make subject better..."></textarea>
-            <button onclick="sendFeedback()">Update Email</button>
+                <button type="button" class="generateBtn" onclick="generateEmail()">Generate Email</button>
+            </form>
         </div>
 
-        <!-- Send Mail Box -->
-        <div id="sendBox" style="display:none;">
-            <label>Attach File (Optional)</label>
-            <input type="file" id="attachment">
 
-            <button onclick="sendMail()" class="sendBtn">Send Final Email</button>
+        <!-- RIGHT PANEL -->
+        <div class="right-panel">
+
+            <div class="section">
+                <label>Detected Email</label>
+                <input id="emailDisplay" readonly placeholder="Detected email will appear here" />
+            </div>
+
+            <div id="output" class="outputBox" style="display:none;"></div>
+
+            <div id="feedbackBox" class="section" style="display:none;">
+                <label>Give Feedback</label>
+                <textarea id="feedbackInput" rows="3" placeholder="Make subject better..."></textarea>
+                <button onclick="sendFeedback()">Update Email</button>
+            </div>
+
+            <div id="sendBox" class="section" style="display:none;">
+
+                <label>Attach Resume (Optional)</label>
+
+                <div class="file-upload-box">
+                    <span id="fileLabel">Choose File</span>
+                    <input type="file" id="attachment" onchange="updateFileLabel(event)">
+                </div>
+
+                <button id="sendBtn" onclick="sendMail()" class="sendBtn" disabled>
+                    Send Final Email
+                </button>
+            </div>
+
         </div>
+
     </div>
 
 
+    <!-- SCRIPT -->
     <script>
         function generateEmail() {
             const formData = new FormData(document.getElementById("jobForm"));
@@ -60,7 +81,12 @@
                     document.getElementById("output").innerHTML =
                         `<b>Subject:</b> ${d.subject}<br><br><b>Body:</b><br>${d.body.replace(/\n/g, '<br>')}`;
 
+                    document.getElementById("emailDisplay").value = d.email || "";
+
                     document.getElementById("feedbackBox").style.display = 'block';
+                    document.getElementById("sendBox").style.display = 'block';
+
+                    document.getElementById("sendBtn").disabled = true;
                 });
         }
 
@@ -77,8 +103,14 @@
                     document.getElementById("output").innerHTML =
                         `<b>Subject:</b> ${d.subject}<br><br><b>Body:</b><br>${d.body.replace(/\n/g, '<br>')}`;
 
-                    document.getElementById("sendBox").style.display = 'block';
+                    document.getElementById("sendBtn").disabled = false;
                 });
+        }
+
+        function updateFileLabel(event) {
+            const file = event.target.files[0];
+            document.getElementById("fileLabel").innerText =
+                file ? file.name : "Choose File";
         }
 
         function sendMail() {
