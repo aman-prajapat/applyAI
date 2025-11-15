@@ -64,6 +64,7 @@
         </div>
 
     </div>
+    <div id="successToast" class="toast">Email delivered successfully</div>
 
 
     <!-- SCRIPT -->
@@ -86,7 +87,8 @@
                     document.getElementById("feedbackBox").style.display = 'block';
                     document.getElementById("sendBox").style.display = 'block';
 
-                    document.getElementById("sendBtn").disabled = true;
+                    // FIX: Enable send button immediately
+                    document.getElementById("sendBtn").disabled = false;
                 });
         }
 
@@ -103,6 +105,7 @@
                     document.getElementById("output").innerHTML =
                         `<b>Subject:</b> ${d.subject}<br><br><b>Body:</b><br>${d.body.replace(/\n/g, '<br>')}`;
 
+                    // Ensure send button stays enabled
                     document.getElementById("sendBtn").disabled = false;
                 });
         }
@@ -114,18 +117,29 @@
         }
 
         function sendMail() {
-            const fd = new FormData();
-            const file = document.getElementById("attachment").files[0];
+                const fd = new FormData();
+                const file = document.getElementById("attachment").files[0];
 
-            if (file) fd.append('attachment', file);
+                if (file) fd.append('attachment', file);
 
-            fetch('/send', {
-                method: 'POST',
-                body: fd
-            })
-                .then(res => res.text())
-                .then(msg => alert(msg));
-        }
+                fetch('/send', {
+                    method: 'POST',
+                    body: fd
+                })
+                    .then(res => res.text())
+                    .then(msg => showSuccess(msg));
+            }
+
+            function showSuccess(message) {
+                    const toast = document.getElementById("successToast");
+                    toast.innerText = message;
+                    toast.classList.add("show");
+
+                    setTimeout(() => {
+                        toast.classList.remove("show");
+                    }, 3000);
+                }
+
     </script>
 
 </body>
