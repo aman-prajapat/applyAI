@@ -1,0 +1,7 @@
+langchain==1.0.5
+langgraph
+langsmith
+flask
+langchain-groq
+python-dotenv
+gunicorn
