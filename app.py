@@ -42,6 +42,7 @@ def getData():
     global WORKFLOW
     checkpointer = InMemorySaver()
     WORKFLOW = APPLYGRAPH.compile(checkpointer=checkpointer)
+    
 
     user_info = request.form['user_info']
     post_data = request.form['post_data']
