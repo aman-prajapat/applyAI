@@ -1,1 +1,1 @@
-https://recommendationsys-tt4y.onrender.com
+https://applyai-8s02.onrender.com
